@@ -24,20 +24,21 @@ module.exports = async function (packages: any) {
     Router.get('/:username', async (req: any, res: any) => {
         const { username } = req.params;
         console.log(username);
-        const data = await db.any("SELECT u.firstname, u.lastname, u.username, l.id, l.name, l.category, " +
-            "l.expiration_date, l.top_bid, l.price, l.is_auction, l.localization, l.image_link " +
-            "FROM listings AS l " +
-            "INNER JOIN users u on u.id = l.owner_id " +
-            "WHERE u.username = $1", [username]);
-        console.log(data);
-        if(!data.length)
-            return res.status(500).send('unknown error');
+        await db.one("SELECT id, firstname, lastname, username, created_at FROM Users WHERE username = $1", [username])
+            .then(async (user: any) =>{
+                console.log(user);
+                let lists = await db.any("SELECT * FROM listings as l WHERE l.id = $1", [user.id]);
 
-        res.status(200).json({
-            firstname: data[0].firstname,
-            lastname: data[0].lastname,
-            data
-        });
+                res.status(200).json({
+                    firstname: user.firstname,
+                    lastname: user.lastname,
+                    created_at: user.created_at,
+                    data: lists
+                });
+            })
+            .catch(() =>{
+                res.status(404).send("User not found");
+            });
     });
 
     Router.post('/signup', async function (req: any, res: any) {
@@ -93,7 +94,7 @@ module.exports = async function (packages: any) {
         if(!email.includes('@') || !email.includes('.') || !(email.length >= 5)) return res.status(400).send('bad email');
         //if(password.length === 0) return res.status(400).send('password is too short');
 
-        await db.one("SELECT id, email, firstname, lastname, localization, tfa, username FROM Users WHERE email = $1 AND password = $2",
+        await db.one("SELECT id, email, firstname, lastname, localization, tfa, username, created_at FROM Users WHERE email = $1 AND password = $2",
             [email, sha512(password)])
             .then((user: any) =>{
                 if(user.tfa) {

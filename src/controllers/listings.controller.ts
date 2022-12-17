@@ -143,6 +143,20 @@ module.exports = async function (packages: any) {
         res.status(200).send('Successfully added to favourites');
     });
 
+    Router.get('/favourites', isLoggedMid, (req: any, res: any) => {
+        const {
+            token
+        } = req.body;
+
+        db.one("SELECT * FROM favourites AS f RIGHT JOIN listings AS l ON f.user_id = l.owner_id WHERE f.user_id = $1", [token.id])
+            .then((data: any) => {
+                res.status(200).send(data);
+            })
+            .catch((err: any) => {
+                console.error(err);
+                return res.status(500).send("Unknown error");
+            });
+    });
 
     Router.delete('/', isLoggedMid, async (req: any, res: any) => {
         const {
@@ -175,6 +189,8 @@ module.exports = async function (packages: any) {
             })
          */
     });
+
+    Router.post('/buy/:id')
 
     return Router;
 };
