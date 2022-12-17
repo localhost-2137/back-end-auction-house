@@ -21,21 +21,43 @@ module.exports = async function (packages: any) {
         res.send('users');
     });
 
+    Router.get('/:username', async (req: any, res: any) => {
+        const { username } = req.params;
+        console.log(username);
+        const data = await db.any("SELECT u.firstname, u.lastname, u.username, l.id, l.name, l.category, " +
+            "l.expiration_date, l.top_bid, l.price, l.is_auction, l.localization, l.image_link " +
+            "FROM listings AS l " +
+            "INNER JOIN users u on u.id = l.owner_id " +
+            "WHERE u.username = $1", [username]);
+        console.log(data);
+        if(!data.length)
+            return res.status(500).send('unknown error');
+
+        res.status(200).json({
+            firstname: data[0].firstname,
+            lastname: data[0].lastname,
+            data
+        });
+    });
+
     Router.post('/signup', async function (req: any, res: any) {
-        let verificationCode: string = uuidv4();
+        let verificationCode: any = uuidv4();
 
         const { username, email, password, firstname, lastname, localization, tfa } = req.body;
         const secondsSinceEpoch = Math.round(Date.now() / 1000);
 
-        let secretKey;
+
+        let secret: any = {};
         if(tfa) {
             const newSecret = twofactor.generateSecret({ name: "Auction House", account: username });
+            secret = newSecret;
         }
+
 
         await db.none("INSERT INTO Users " +
             "(username, email, password, firstname, lastname, localization, created_at, verification, verified, tfa) " +
-            "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-            [username, email, sha512(password), firstname, lastname, localization, secondsSinceEpoch, verificationCode, false])
+            "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+            [username, email, sha512(password), firstname, lastname, localization, secondsSinceEpoch, verificationCode, false, secret.secret])
             .then(async () => {
                 await fmail.send("fwverify", {
                     emails: [email],
@@ -45,9 +67,10 @@ module.exports = async function (packages: any) {
                     displayName: "Account Verification"
                 });
 
-                return res.status(200).send("OK");
+                return res.status(200).json(secret);
             })
             .catch((e: any) => {
+                console.error(e);
                 return res.status(500).send("ERROR");
             });
     });
@@ -65,17 +88,23 @@ module.exports = async function (packages: any) {
     });
 
     Router.post('/signin', async function (req: any, res: any) {
-        const { email, password } = req.body;
+        const { email, password, tfa } = req.body;
 
-        await db.one("SELECT id, email, firstname, lastname, localization, postcode FROM Users WHERE email = $1 AND password = $2",
+        if(!email.includes('@') || !email.includes('.') || !(email.length >= 5)) return res.status(400).send('bad email');
+        //if(password.length === 0) return res.status(400).send('password is too short');
+
+        await db.one("SELECT id, email, firstname, lastname, localization, tfa, username FROM Users WHERE email = $1 AND password = $2",
             [email, sha512(password)])
             .then((user: any) =>{
-                //TODO: Zrób poniżej
-                const signedToken = jwt.sign({
-                    data: user
-                }, SECRET);
+                if(user.tfa) {
+                    if(!tfa) return res.status(400).send("SEND 2FA");
+
+                    const { delta } = twofactor.verifyToken(user.tfa, tfa);
+                    if(delta < 0) return res.status(401).send("BAD 2FA");
+                }
+
                 return res.status(200).json({
-                    token: signedToken
+                    token: jwt.sign({data: user}, SECRET)
                 });
             })
             .catch(() =>{

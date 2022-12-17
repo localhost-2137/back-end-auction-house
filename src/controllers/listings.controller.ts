@@ -1,3 +1,5 @@
+import e from "express";
+
 module.exports = async function (packages: any) {
     const {
         express,
@@ -21,7 +23,7 @@ module.exports = async function (packages: any) {
 
 
         await db.any("SELECT u.firstname, u.lastname, u.username, l.id, l.name, l.category, " +
-            "l.expiration_date, l.top_bid, l.price, l.is_auction, l.localization " +
+            "l.expiration_date, l.top_bid, l.price, l.is_auction, l.localization, l.image_link " +
             "FROM listings AS l " +
             "INNER JOIN users u on u.id = l.owner_id " +
             "WHERE $1 = -1 OR l.category = $1", [cat])
@@ -55,6 +57,7 @@ module.exports = async function (packages: any) {
             });
     });
 
+
     Router.put('/', isLoggedMid, async (req: any, res: any) => {
         let {
             name,
@@ -63,20 +66,20 @@ module.exports = async function (packages: any) {
             isAuction,
             bidPrice,
             price,
+            image_link,
             localization
         } = req.body;
         localization = localization || req.body.token.localization;
-        console.log(localization);
 
         const { id } = req.body.token;
         const currentDate = Math.floor(Date.now() / 1000);
 
         await db.one(
             "INSERT INTO Listings " +
-            "(owner_id, name, description, category, created_at, expiration_date, is_auction, top_bid, price, localization) " +
-            "VALUES ($1, $2, $3 ,$4, $5, $6, $7, $8, $9, $10) RETURNING id",
+            "(owner_id, name, description, category, created_at, expiration_date, is_auction, top_bid, price, localization, image_link) " +
+            "VALUES ($1, $2, $3 ,$4, $5, $6, $7, $8, $9, $10, $11) RETURNING id",
 
-            [id, name, description, category, currentDate, currentDate + DEFAULT_EXPIRATION, isAuction, bidPrice, price, localization]
+            [id, name, description, category, currentDate, currentDate + DEFAULT_EXPIRATION, isAuction, bidPrice, price, localization, image_link]
         )
             .then((data: any) => {
                 const id = data.id;
@@ -85,7 +88,7 @@ module.exports = async function (packages: any) {
             })
             .catch((err: any) => {
                 console.log(err);
-                return res.status(400).send('');
+                return res.status(400).send(err);
             });
     });
 
@@ -120,6 +123,57 @@ module.exports = async function (packages: any) {
             .catch(() =>{
                 return res.status(400).send("ERROR");
             });
+    });
+
+    Router.put('/favourites', isLoggedMid, (req: any, res: any) => {
+        const {
+            listingId,
+            token
+        } = req.body;
+
+        if(!listingId)
+            return res.status(400).send('listingId cannot be null');
+
+        db.none("INSERT INTO favourites (user_id, listing_id) VALUES ($1, $2)",
+            [token.id, listingId])
+            .catch((err: any) => {
+                console.error(err);
+                return res.status(500).send("Unknown error");
+            });
+        res.status(200).send('Successfully added to favourites');
+    });
+
+
+    Router.delete('/', isLoggedMid, async (req: any, res: any) => {
+        const {
+            listingId,
+            token
+        } = req.body;
+
+        await db.none("DELETE FROM listings AS l WHERE l.id = $1 AND l.owner_id = $2", [listingId, token.id])
+            .then(() => {
+                res.status(200).send('works');
+            })
+            .catch((err: any) => {
+                console.error(err);
+                return res.status(500).send("Unknown Error");
+            });
+        /*
+        await db.one("SELECT l.owner_id FROM listings AS l WHERE l.id = $1", [listingId])
+            .then((data: any) => {
+                console.log(data.owner_id);
+                if(data.owner_id != token.id)
+                    return res.status(400).send("You cannot delete auction which doesn't belong to you");
+
+                try {
+                    db.none("DELETE FROM listings AS l WHERE l.id = $1", [listingId]);
+                } catch (err) {
+                    console.error(err);
+                    return  res.status(500).send("Unknown Error");
+                }
+                res.status(200).send('successfully deleted');
+            })
+         */
     });
 
     return Router;

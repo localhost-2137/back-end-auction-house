@@ -2,6 +2,7 @@ const path = require('path');
 import dotenv from 'dotenv';
 dotenv.config();
 
+const CORS = require('cors');
 const jwt = require('jsonwebtoken');
 import express from 'express';
 const geoLib = require('geolib');
@@ -38,6 +39,11 @@ async function bootstrap() {
         geoLib,
         isLoggedMid
     }
+
+    app.use(CORS({
+        origin: "*"
+    }));
+
     app.use('/', await jwtDecodeMiddleware(packages));
     app.use('/', await indexController(express, db));
     app.use('/users', await usersController(packages));
