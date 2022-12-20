@@ -28,8 +28,7 @@ module.exports = async function (packages: any) {
         await db.one("SELECT id, firstname, lastname, username, created_at FROM Users WHERE username = $1", [username])
             .then(async (user: any) => {
                 console.log(user);
-                let lists = await db.any("SELECT * FROM listings as l WHERE l.id = $1", [user.id]);
-
+                let lists = await db.any("SELECT * FROM listings as l WHERE l.owner_id = $1", [user.id]);
                 res.status(200).json({
                     firstname: user.firstname,
                     lastname: user.lastname,
@@ -65,7 +64,7 @@ module.exports = async function (packages: any) {
                     emails: [email],
                     isBodyHTML: true,
                     subject: "Account verification",
-                    content: `Verify your account clicking that link: <a href="loremipsum/${verificationCode}">loremipsum/${verificationCode}</a>`,
+                    content: `Verify your account clicking that link: <a href="http://172.16.15.202:3000/users/verify/${verificationCode}">http://172.16.15.202/users/verify/${verificationCode}</a>`,
                     displayName: "Account Verification"
                 });
 
